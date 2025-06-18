@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status} while fetching pre-selected-destinations.txt`);
             }
             const data = await response.text();
-            const lines = data.trim().split('\n'); // Split by newline characters
+            const lines = data.trim().split(/\r?\n/); // Split by newline characters
 
             if (lines.length === 0 || (lines.length === 1 && lines[0].trim() === '')) {
                 console.warn('pre-selected-destinations.txt is empty or contains only whitespace.');
