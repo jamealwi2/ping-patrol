@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Connectivity Tester</title>
+    <title>Ping Patrol</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
-        <h1>Network Connectivity Tester</h1>
+        <h1>Ping Patrol</h1>
 
         <div class="form-group">
             <label for="source">Source (Kubernetes Cluster Name):</label>
@@ -16,15 +16,15 @@
         </div>
 
         <div class="form-group">
-            <label for="destinations">Destinations (comma-separated or new line):</label>
-            <textarea id="destinations" name="destinations" rows="5" placeholder="e.g., google.com, 8.8.8.8, internal-service:8080"></textarea>
-        </div>
-
-        <div class="form-group">
             <label for="prepopulated-destinations">Or select from prepopulated list:</label>
             <select id="prepopulated-destinations" name="prepopulated-destinations" multiple>
                 <!-- Options will be populated by script.js -->
             </select>
+        </div>
+
+        <div class="form-group">
+            <label for="destinations">Destinations (comma-separated or new line):</label>
+            <textarea id="destinations" name="destinations" rows="5" placeholder="e.g., google.com, 8.8.8.8, internal-service:8080"></textarea>
         </div>
 
         <button id="test-button">Test Connectivity</button>
