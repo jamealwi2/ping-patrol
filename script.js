@@ -9,50 +9,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const celebrationBanner = document.getElementById('celebration-banner');
     const noResultsMessage = document.getElementById('no-results-message');
 
-    // const samplePrepopulatedDests = [ ... ]; // Removed
-
     // Populate prepopulated destinations
     async function populatePrepopulatedDestinations() {
         try {
-            const response = await fetch('pre-selected-destinations.txt');
+            const response = await fetch('/api/destinations'); // Changed URL
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status} while fetching pre-selected-destinations.txt`);
+                throw new Error(`HTTP error! status: ${response.status} while fetching /api/destinations`);
             }
-            const data = await response.text();
-            const lines = data.trim().split(/\r?\n/); // Split by newline characters
 
-            if (lines.length === 0 || (lines.length === 1 && lines[0].trim() === '')) {
-                console.warn('pre-selected-destinations.txt is empty or contains only whitespace.');
+            const destinations = await response.json(); // Get JSON data
+
+            if (!destinations || destinations.length === 0) {
+                console.warn('No prepopulated destinations received from API or API returned empty list.');
                 prepopulatedDestsSelect.innerHTML = '<option value="">No prepopulated destinations found</option>';
                 return;
             }
 
-            lines.forEach(line => {
-                const parts = line.split(',');
-                if (parts.length >= 2) { // Ensure there's at least a name and an address
-                    const name = parts[0].trim();
-                    const address = parts.slice(1).join(',').trim(); // Handle cases where name might have commas if not careful with input file
-                    if (name && address) {
-                        const option = document.createElement('option');
-                        option.value = address;
-                        option.textContent = `${name} (${address})`;
-                        prepopulatedDestsSelect.appendChild(option);
-                    } else {
-                        console.warn(`Skipping malformed line in pre-selected-destinations.txt: ${line}`);
-                    }
+            destinations.forEach(dest => {
+                if (dest.name && dest.address) {
+                    const option = document.createElement('option');
+                    option.value = dest.address;
+                    option.textContent = `${dest.name} (${dest.address})`;
+                    prepopulatedDestsSelect.appendChild(option);
                 } else {
-                    console.warn(`Skipping malformed line (not enough parts) in pre-selected-destinations.txt: ${line}`);
+                    console.warn('Received a destination object with missing name or address:', dest);
                 }
             });
 
         } catch (error) {
-            console.error('Error loading or parsing prepopulated destinations:', error);
-            // Display an error message in the dropdown or a dedicated status area
+            console.error('Error fetching prepopulated destinations from API:', error); // Updated console message
             prepopulatedDestsSelect.innerHTML = '<option value="">Error loading destinations</option>';
-            // Optionally, display a more user-visible error message elsewhere on the page
-            // const noResultsMessage = document.getElementById('no-results-message'); // Already defined above
             if (noResultsMessage) {
-                noResultsMessage.textContent = 'Could not load prepopulated destinations. Please check the console for details.';
+                noResultsMessage.textContent = 'Could not load prepopulated destinations from the backend. Please ensure the backend server is running and check console for details.'; // Updated user message
                 noResultsMessage.classList.remove('hidden');
             }
         }
@@ -65,15 +53,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const manualDestinations = destinationsTextarea.value.trim().split(/[\s,]+/).filter(Boolean);
         const selectedPrepopulated = Array.from(prepopulatedDestsSelect.selectedOptions).map(option => option.value);
 
-        const allDestinations = [...new Set([...manualDestinations, ...selectedPrepopulated])]; // Combine and remove duplicates
+        const allDestinations = [...new Set([...manualDestinations, ...selectedPrepopulated])];
 
-        // Clear previous results and messages
         successfulResultsDiv.innerHTML = '';
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
         celebrationBanner.textContent = '';
         noResultsMessage.classList.add('hidden');
-
 
         if (!source) {
             noResultsMessage.textContent = "Error: Source (Kubernetes Cluster Name) cannot be empty.";
@@ -87,14 +73,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Show a general "Testing..." message
         successfulResultsDiv.innerHTML = `<p>Testing connectivity from ${source} to ${allDestinations.join(', ')}...</p>`;
 
-        // Placeholder for actual backend API call
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
         const mockResults = allDestinations.map(dest => {
-            const isSuccess = Math.random() > 0.3; // Simulate success/failure
+            const isSuccess = Math.random() > 0.3;
             return {
                 destination: dest,
                 status: isSuccess ? "SUCCESS" : "FAILED",
@@ -106,7 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function displayResults(results, sourceCluster) {
-        // Clear previous results and messages
         successfulResultsDiv.innerHTML = '';
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
@@ -148,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
             failedResultsDiv.innerHTML = '<p>No failed connections.</p>';
         }
 
-        if (results.length === 0) { // Should be covered by the first check, but as a safeguard
+        if (results.length === 0) {
              noResultsMessage.textContent = `No test results to display for ${sourceCluster}.`;
              noResultsMessage.classList.remove('hidden');
              successfulResultsDiv.innerHTML = '<p>None</p>';
@@ -161,7 +144,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Allow users to add destinations from select to textarea by double clicking
     prepopulatedDestsSelect.addEventListener('dblclick', () => {
         const selectedValues = Array.from(prepopulatedDestsSelect.selectedOptions).map(option => option.value);
         if (selectedValues.length > 0) {
