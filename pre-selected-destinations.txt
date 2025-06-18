@@ -1,0 +1,7 @@
+Google Primary DNS,8.8.8.8
+Google Secondary DNS,8.8.4.4
+Cloudflare Primary DNS,1.1.1.1
+Cloudflare Secondary DNS,1.0.0.1
+Example Domain,example.com
+Localhost HTTP,127.0.0.1:80
+Internal Wiki,wiki.internal.example.com
