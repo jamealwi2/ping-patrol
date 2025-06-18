@@ -100,7 +100,7 @@ def test_connectivity():
     # source_cluster_context = data.get('source') # Removed
     destinations = data.get('destinations')
     namespace = "application"
-    docker_image = "docker.jamealwi2.io/tester-agent:beta.0"
+    docker_image = "docker.branch.io/tester-agent:beta.0"
 
     # if not source_cluster_context: # Removed validation
     #     return jsonify({"error": "Missing 'source' (kubectl context) in request"}), 400
