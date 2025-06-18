@@ -30,8 +30,18 @@
         <button id="test-button">Test Connectivity</button>
 
         <div class="results">
-            <h2>Results:</h2>
-            <pre id="results-output"></pre>
+            <div id="celebration-banner" class="hidden"></div>
+            <h2>Successful Connections:</h2>
+            <div id="successful-results" class="results-category">
+                <!-- Successful results will be populated here -->
+            </div>
+            <h2>Failed Connections:</h2>
+            <div id="failed-results" class="results-category">
+                <!-- Failed results will be populated here -->
+            </div>
+            <div id="no-results-message" class="hidden">
+                <p>No results to display yet, or no tests run.</p>
+            </div>
         </div>
     </div>
 
