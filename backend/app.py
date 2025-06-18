@@ -1,7 +1,9 @@
 import os
 from flask import Flask, jsonify, current_app
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app) # This will enable CORS for all routes and origins by default
 
 # Configuration for the destinations file path
 # Assumes pre-selected-destinations.txt is in the same directory as app.py
