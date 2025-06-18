@@ -12,12 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Populate prepopulated destinations
     async function populatePrepopulatedDestinations() {
         try {
-            const response = await fetch('http://localhost:5000/api/destinations'); // Changed URL
+            const response = await fetch('http://localhost:5000/api/destinations');
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status} while fetching http://localhost:5000/api/destinations`);
             }
 
-            const destinations = await response.json(); // Get JSON data
+            const destinations = await response.json();
 
             if (!destinations || destinations.length === 0) {
                 console.warn('No prepopulated destinations received from API or API returned empty list.');
@@ -37,10 +37,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
         } catch (error) {
-            console.error('Error fetching prepopulated destinations from API:', error); // Updated console message
+            console.error('Error fetching prepopulated destinations from API:', error);
             prepopulatedDestsSelect.innerHTML = '<option value="">Error loading destinations</option>';
             if (noResultsMessage) {
-                noResultsMessage.textContent = 'Could not load prepopulated destinations from the backend. Please ensure the backend server is running and check console for details.'; // Updated user message
+                noResultsMessage.textContent = 'Could not load prepopulated destinations from the backend. Please ensure the backend server is running and check console for details.';
                 noResultsMessage.classList.remove('hidden');
             }
         }
@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const allDestinations = [...new Set([...manualDestinations, ...selectedPrepopulated])];
 
+        // Clear previous results from display areas
         successfulResultsDiv.innerHTML = '';
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
@@ -73,24 +74,52 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        successfulResultsDiv.innerHTML = `<p>Testing connectivity from ${source} to ${allDestinations.join(', ')}...</p>`;
+        // Prepare UI for testing
+        successfulResultsDiv.innerHTML = `<p>Requesting tests from backend for ${source} to ${allDestinations.join(', ')}...</p>`;
+        // failedResultsDiv.innerHTML = ''; // Already cleared above
+        // celebrationBanner.classList.add('hidden'); // Already cleared above
+        // noResultsMessage.classList.add('hidden'); // Already cleared above
 
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        try {
+            const response = await fetch('http://localhost:5000/api/test-connectivity', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    source: source,
+                    destinations: allDestinations
+                }),
+            });
 
-        const mockResults = allDestinations.map(dest => {
-            const isSuccess = Math.random() > 0.3;
-            return {
-                destination: dest,
-                status: isSuccess ? "SUCCESS" : "FAILED",
-                details: isSuccess ? "Connection successful." : "Connection timed out."
-            };
-        });
+            if (!response.ok) {
+                // Try to get error message from backend response body if possible
+                let errorData;
+                try {
+                    errorData = await response.json();
+                } catch (e) {
+                    // Ignore if response is not JSON
+                }
+                const errorMessage = errorData && errorData.error ? errorData.error : `HTTP error! status: ${response.status}`;
+                throw new Error(errorMessage);
+            }
 
-        displayResults(mockResults, source);
+            const results = await response.json();
+            displayResults(results, source); // Use existing displayResults function
+
+        } catch (error) {
+            console.error('Error during connectivity test:', error);
+            // Display error in the UI
+            failedResultsDiv.innerHTML = ''; // Clear any "testing..." message from successfulResultsDiv if it was used for that
+            successfulResultsDiv.innerHTML = ''; // Clear "Requesting tests..." message
+            noResultsMessage.textContent = `Error during connectivity test: ${error.message}. Please check the console for more details. Ensure the backend is running and reachable.`;
+            noResultsMessage.classList.remove('hidden');
+            celebrationBanner.classList.add('hidden');
+        }
     });
 
     function displayResults(results, sourceCluster) {
-        successfulResultsDiv.innerHTML = '';
+        successfulResultsDiv.innerHTML = ''; // Clear any previous messages like "testing..."
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
         celebrationBanner.textContent = '';
