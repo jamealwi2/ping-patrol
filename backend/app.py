@@ -51,9 +51,6 @@ def run_kubectl_command(command_args, check=True):
         current_app.logger.info(f"Running kubectl command: {' '.join(command_args)}")
         command_args_str = [str(arg) for arg in command_args] # Ensure all args are strings
         process = subprocess.run(command_args_str, capture_output=True, text=True, check=check)
-        # Log stdout only if it's not excessively long, or just a summary
-        # For instance, kubectl get job -o json can be very verbose.
-        # current_app.logger.info(f"kubectl stdout: {process.stdout.strip()}")
         if process.stderr.strip():
             current_app.logger.warning(f"kubectl stderr: {process.stderr.strip()}")
         return process
@@ -67,13 +64,12 @@ def run_kubectl_command(command_args, check=True):
         current_app.logger.error(f"kubectl command not found. Ensure kubectl is installed and in PATH for command: {' '.join(command_args)}")
         raise
 
-def fetch_job_logs(job_name, namespace, context):
+def fetch_job_logs(job_name, namespace):
     """Helper function to fetch logs for a given job."""
-    current_app.logger.info(f"Fetching logs for job '{job_name}' in namespace '{namespace}' on context '{context}'.")
+    current_app.logger.info(f"Fetching logs for job '{job_name}' in namespace '{namespace}'.")
     get_pods_process = run_kubectl_command([
         "kubectl", "get", "pods",
         "--namespace", namespace,
-        "--context", context,
         "-l", f"job-name={job_name}",
         "-o", "json"
     ])
@@ -91,7 +87,6 @@ def fetch_job_logs(job_name, namespace, context):
         "kubectl", "logs", pod_name,
         "-c", container_name,
         "--namespace", namespace,
-        "--context", context,
         "--tail=-1"
     ])
     return logs_process.stdout
@@ -102,17 +97,17 @@ def test_connectivity():
     if not data:
         return jsonify({"error": "No input data provided"}), 400
 
-    source_cluster_context = data.get('source')
+    # source_cluster_context = data.get('source') # Removed
     destinations = data.get('destinations')
     namespace = "application"
     docker_image = "docker.jamealwi2.io/tester-agent:beta.0"
 
-    if not source_cluster_context:
-        return jsonify({"error": "Missing 'source' (kubectl context) in request"}), 400
+    # if not source_cluster_context: # Removed validation
+    #     return jsonify({"error": "Missing 'source' (kubectl context) in request"}), 400
     if not destinations or not isinstance(destinations, list) or len(destinations) == 0:
         return jsonify({"error": "Missing or invalid 'destinations' list in request"}), 400
 
-    current_app.logger.info(f"Received test request for context: {source_cluster_context} for destinations: {', '.join(destinations)}")
+    current_app.logger.info(f"Received test request for destinations: {', '.join(destinations)} (using current kubectl context)")
 
     unique_job_id = str(uuid.uuid4())[:8]
     job_name = f"ping-patrol-tester-job-{unique_job_id}"
@@ -145,8 +140,8 @@ def test_connectivity():
             yaml.dump(job_yaml_template, tmp_job_file)
             tmp_job_file_path = tmp_job_file.name
 
-        current_app.logger.info(f"Applying Job '{job_name}' from temporary file: {tmp_job_file_path} to context '{source_cluster_context}' in namespace '{namespace}'")
-        run_kubectl_command(["kubectl", "apply", "-f", tmp_job_file_path, "--context", source_cluster_context])
+        current_app.logger.info(f"Applying Job '{job_name}' from temporary file: {tmp_job_file_path} in namespace '{namespace}' (using current kubectl context)")
+        run_kubectl_command(["kubectl", "apply", "-f", tmp_job_file_path]) # Removed context
 
         job_succeeded = False
         max_retries = 30
@@ -158,7 +153,7 @@ def test_connectivity():
             get_job_process = run_kubectl_command([
                 "kubectl", "get", "job", job_name,
                 "--namespace", namespace,
-                "--context", source_cluster_context,
+                # "--context", source_cluster_context, # Removed context
                 "-o", "json"
             ], check=False)
 
@@ -171,7 +166,7 @@ def test_connectivity():
                 if job_status_data.get("status", {}).get("failed", 0) > 0:
                     current_app.logger.error(f"Job '{job_name}' failed. Conditions: {job_status_data.get('status', {}).get('conditions')}")
                     try:
-                        failed_logs = fetch_job_logs(job_name, namespace, source_cluster_context)
+                        failed_logs = fetch_job_logs(job_name, namespace) # Removed context
                         return jsonify({"error": f"Tester agent job '{job_name}' failed.", "logs": failed_logs}), 500
                     except Exception as log_err:
                         current_app.logger.error(f"Additionally, failed to fetch logs for failed job '{job_name}': {log_err}")
@@ -183,7 +178,7 @@ def test_connectivity():
             current_app.logger.error(f"Job '{job_name}' did not succeed within the timeout period ({max_retries * poll_interval}s).")
             return jsonify({"error": f"Tester agent job '{job_name}' timed out."}), 500
 
-        results_json_str = fetch_job_logs(job_name, namespace, source_cluster_context)
+        results_json_str = fetch_job_logs(job_name, namespace) # Removed context
         results = json.loads(results_json_str)
         return jsonify(results), 200
 
