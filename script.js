@@ -3,7 +3,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const destinationsTextarea = document.getElementById('destinations');
     const prepopulatedDestsSelect = document.getElementById('prepopulated-destinations');
     const testButton = document.getElementById('test-button');
-    const resultsOutput = document.getElementById('results-output');
+    // const resultsOutput = document.getElementById('results-output'); // Removed
+
+    const successfulResultsDiv = document.getElementById('successful-results');
+    const failedResultsDiv = document.getElementById('failed-results');
+    const celebrationBanner = document.getElementById('celebration-banner');
+    const noResultsMessage = document.getElementById('no-results-message');
 
     // Sample prepopulated destinations (replace with actual data source if available)
     const samplePrepopulatedDests = [
@@ -33,30 +38,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const allDestinations = [...new Set([...manualDestinations, ...selectedPrepopulated])]; // Combine and remove duplicates
 
+        // Clear previous results and messages
+        successfulResultsDiv.innerHTML = '';
+        failedResultsDiv.innerHTML = '';
+        celebrationBanner.classList.add('hidden');
+        celebrationBanner.textContent = '';
+        noResultsMessage.classList.add('hidden');
+
+
         if (!source) {
-            resultsOutput.textContent = "Error: Source (Kubernetes Cluster Name) cannot be empty.";
+            noResultsMessage.textContent = "Error: Source (Kubernetes Cluster Name) cannot be empty.";
+            noResultsMessage.classList.remove('hidden');
             return;
         }
 
         if (allDestinations.length === 0) {
-            resultsOutput.textContent = "Error: Please provide at least one destination.";
+            noResultsMessage.textContent = "Error: Please provide at least one destination.";
+            noResultsMessage.classList.remove('hidden');
             return;
         }
 
-        resultsOutput.textContent = "Testing connectivity...\n";
-        resultsOutput.textContent += `Source: ${source}\n`;
-        resultsOutput.textContent += `Destinations: ${allDestinations.join(', ')}\n\n`;
+        // Show a general "Testing..." message
+        successfulResultsDiv.innerHTML = `<p>Testing connectivity from ${source} to ${allDestinations.join(', ')}...</p>`;
 
         // Placeholder for actual backend API call
         // For now, simulate results after a delay
-
-        // Simulate API call and display mock results
-        // In a real application, this would be an asynchronous call to a backend API
-        // e.g., const response = await fetch('/api/test-connectivity', { /* ... */ });
-        // const data = await response.json();
-        // displayResults(data);
-
-        resultsOutput.textContent += "Simulating backend call...\n";
+        // resultsOutput.textContent += "Simulating backend call...\n"; // Removed
         await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
 
         const mockResults = allDestinations.map(dest => {
@@ -72,16 +79,65 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function displayResults(results, sourceCluster) {
-        resultsOutput.textContent = `Connectivity Test Results from ${sourceCluster}:\n\n`;
-        if (results.length === 0) {
-            resultsOutput.textContent += "No results to display.";
+        // Clear previous results and messages
+        successfulResultsDiv.innerHTML = '';
+        failedResultsDiv.innerHTML = '';
+        celebrationBanner.classList.add('hidden');
+        celebrationBanner.textContent = '';
+        noResultsMessage.classList.add('hidden');
+
+        if (!results || results.length === 0) {
+            noResultsMessage.textContent = `No test results to display for ${sourceCluster}.`;
+            noResultsMessage.classList.remove('hidden');
+            // Ensure other sections are not accidentally shown
+            successfulResultsDiv.innerHTML = '<p>None</p>';
+            failedResultsDiv.innerHTML = '<p>None</p>';
             return;
         }
+
+        let failedCount = 0;
+        let successCount = 0;
+
         results.forEach(result => {
-            resultsOutput.textContent += `Destination: ${result.destination}\n`;
-            resultsOutput.textContent += `Status: ${result.status}\n`;
-            resultsOutput.textContent += `Details: ${result.details}\n\n`;
+            const resultElement = document.createElement('div');
+            resultElement.classList.add('result-item');
+            resultElement.innerHTML = `
+                <p><strong>Destination:</strong> ${result.destination}</p>
+                <p><strong>Status:</strong> <span class="status-${result.status.toLowerCase()}">${result.status}</span></p>
+                <p><strong>Details:</strong> ${result.details}</p>
+            `;
+            if (result.status === "SUCCESS") {
+                successfulResultsDiv.appendChild(resultElement);
+                successCount++;
+            } else {
+                failedResultsDiv.appendChild(resultElement);
+                failedCount++;
+            }
         });
+
+        if (successCount === 0 && results.length > 0) { // Check results.length to avoid overwriting "None" for empty initial results
+            successfulResultsDiv.innerHTML = '<p>No successful connections.</p>';
+        }
+        if (failedCount === 0 && results.length > 0) {
+            failedResultsDiv.innerHTML = '<p>No failed connections.</p>';
+        }
+
+        // If there were actually no results (e.g. initial state before any test), make sure "None" or "No results" is shown.
+        // This is slightly redundant with the first check in this function but ensures clarity.
+        if (results.length === 0) {
+             noResultsMessage.textContent = `No test results to display for ${sourceCluster}.`;
+             noResultsMessage.classList.remove('hidden');
+             successfulResultsDiv.innerHTML = '<p>None</p>';
+             failedResultsDiv.innerHTML = '<p>None</p>';
+        }
+
+
+        if (failedCount === 0 && successCount > 0) {
+            celebrationBanner.textContent = `🎉 Hooray! All ${successCount} connection(s) from ${sourceCluster} were successful! 🎉`;
+            celebrationBanner.classList.remove('hidden');
+        } else if (failedCount > 0) {
+            // Failed section is already populated, ensure banner is hidden (done at the start)
+        }
     }
 
     // Allow users to add destinations from select to textarea by double clicking
