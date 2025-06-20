@@ -1,199 +1,220 @@
-document.addEventListener('DOMContentLoaded', () => {
-    const sourceInput = document.getElementById('source');
-    const destinationsTextarea = document.getElementById('destinations');
-    const prepopulatedDestsSelect = document.getElementById('prepopulated-destinations');
-    const testButton = document.getElementById('test-button');
+import os
+import time
+import uuid
+import yaml  # For YAML manipulation
+import subprocess
+import tempfile
+import json  # For parsing JSON from kubectl output and logs
+from flask import Flask, jsonify, current_app, request
+from flask_cors import CORS
 
-    const successfulResultsDiv = document.getElementById('successful-results');
-    const failedResultsDiv = document.getElementById('failed-results');
-    const celebrationBanner = document.getElementById('celebration-banner');
-    const noResultsMessage = document.getElementById('no-results-message');
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
-    const k8sJobNameSpan = document.getElementById('k8s-job-name');
-    const k8sPodNamesSpan = document.getElementById('k8s-pod-names');
-    const executionDetailsSection = document.querySelector('.test-run-details details');
+# Configuration for paths
+BACKEND_DIR = os.path.dirname(__file__)
+DESTINATIONS_FILE_PATH = os.path.join(BACKEND_DIR, 'pre-selected-destinations.txt')
+# Path to job template, assuming 'tester-agent' is a sibling directory to 'backend'
+JOB_TEMPLATE_PATH = os.path.join(BACKEND_DIR, '..', 'tester-agent', 'tester-agent-job.yaml')
 
-    // Populate prepopulated destinations
-    async function populatePrepopulatedDestinations() {
-        try {
-            const response = await fetch('http://localhost:5000/api/destinations'); 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status} while fetching http://localhost:5000/api/destinations`);
+@app.route('/api/destinations', methods=['GET'])
+def get_destinations():
+    destinations = []
+    try:
+        if not os.path.exists(DESTINATIONS_FILE_PATH):
+            current_app.logger.error(f"Destinations file not found: {DESTINATIONS_FILE_PATH}")
+            return jsonify({"error": "Destinations file not found on server."}), 500
+        with open(DESTINATIONS_FILE_PATH, 'r') as f:
+            lines = f.readlines()
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):  # Skip empty lines or comments
+                continue
+            parts = line.split(',', 1)  # Split only on the first comma
+            if len(parts) == 2:
+                name = parts[0].strip()
+                address = parts[1].strip()
+                if name and address:
+                    destinations.append({"name": name, "address": address})
+                else:
+                    current_app.logger.warning(f"Skipping malformed line (empty name or address): {line}")
+            else:
+                current_app.logger.warning(f"Skipping malformed line (not enough parts): {line}")
+        return jsonify(destinations)
+    except Exception as e:
+        current_app.logger.error(f"Error reading or parsing destinations file: {e}")
+        return jsonify({"error": "An error occurred while processing destinations on the server."}), 500
+
+def run_kubectl_command(command_args, check=True):
+    """Helper function to run kubectl commands."""
+    try:
+        current_app.logger.info(f"Running kubectl command: {' '.join(command_args)}")
+        command_args_str = [str(arg) for arg in command_args] # Ensure all args are strings
+        process = subprocess.run(command_args_str, capture_output=True, text=True, check=check)
+        if process.stderr.strip():
+            current_app.logger.warning(f"kubectl stderr: {process.stderr.strip()}")
+        return process
+    except subprocess.CalledProcessError as e:
+        current_app.logger.error(f"kubectl command failed for command: {' '.join(e.cmd)}")
+        current_app.logger.error(f"kubectl return code: {e.returncode}")
+        current_app.logger.error(f"kubectl stdout (on error): {e.stdout}")
+        current_app.logger.error(f"kubectl stderr (on error): {e.stderr}")
+        raise
+    except FileNotFoundError:
+        current_app.logger.error(f"kubectl command not found. Ensure kubectl is installed and in PATH for command: {' '.join(command_args)}")
+        raise
+
+def fetch_job_logs(job_name, namespace):
+    """Helper function to fetch logs for a given job. Returns logs and pod name."""
+    current_app.logger.info(f"Fetching logs for job '{job_name}' in namespace '{namespace}'.")
+    get_pods_process = run_kubectl_command([
+        "kubectl", "get", "pods",
+        "--namespace", namespace,
+        "-l", f"job-name={job_name}",
+        "-o", "json"
+    ])
+
+    pods_data = json.loads(get_pods_process.stdout)
+    if not pods_data.get("items"):
+        current_app.logger.error(f"No pods found for job '{job_name}'. Cannot retrieve logs.")
+        raise Exception(f"No pods found for job '{job_name}' to retrieve logs.")
+
+    pod_name = pods_data["items"][0]["metadata"]["name"]
+    container_name = pods_data["items"][0]["spec"]["containers"][0]["name"]
+
+    current_app.logger.info(f"Retrieving logs from pod '{pod_name}', container '{container_name}' for job '{job_name}'")
+    logs_process = run_kubectl_command([
+        "kubectl", "logs", pod_name,
+        "-c", container_name,
+        "--namespace", namespace,
+        "--tail=-1"
+    ])
+    return logs_process.stdout, pod_name
+
+@app.route('/api/test-connectivity', methods=['POST'])
+def test_connectivity():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No input data provided"}), 400
+
+    destinations = data.get('destinations')
+    namespace = "application"
+    docker_image = "docker.branch.io/tester-agent:beta.0"
+
+    if not destinations or not isinstance(destinations, list) or len(destinations) == 0:
+        return jsonify({"error": "Missing or invalid 'destinations' list in request"}), 400
+
+    current_app.logger.info(f"Received test request for destinations: {', '.join(destinations)} (using current kubectl context)")
+
+    unique_job_id = str(uuid.uuid4())[:8]
+    job_name = f"ping-patrol-tester-job-{unique_job_id}"
+    destinations_str = ",".join(destinations)
+    tmp_job_file_path = None
+
+    try:
+        if not os.path.exists(JOB_TEMPLATE_PATH):
+            current_app.logger.error(f"Job template file not found: {JOB_TEMPLATE_PATH}")
+            return jsonify({"error": "Server configuration error: Job template not found."}), 500
+
+        with open(JOB_TEMPLATE_PATH, 'r') as f:
+            job_yaml_template = yaml.safe_load(f)
+
+        job_yaml_template['metadata']['name'] = job_name
+        job_yaml_template['metadata']['namespace'] = namespace
+        if 'labels' not in job_yaml_template['metadata']:
+            job_yaml_template['metadata']['labels'] = {}
+        job_yaml_template['metadata']['labels']['job-id'] = unique_job_id
+
+        if 'metadata' not in job_yaml_template['spec']['template']:
+            job_yaml_template['spec']['template']['metadata'] = {}
+        if 'labels' not in job_yaml_template['spec']['template']['metadata']:
+            job_yaml_template['spec']['template']['metadata']['labels'] = {}
+        job_yaml_template['spec']['template']['metadata']['labels']['job-id'] = unique_job_id
+        job_yaml_template['spec']['template']['spec']['containers'][0]['image'] = docker_image
+        job_yaml_template['spec']['template']['spec']['containers'][0]['args'] = ["--destinations", destinations_str]
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".yaml", dir=BACKEND_DIR) as tmp_job_file:
+            yaml.dump(job_yaml_template, tmp_job_file)
+            tmp_job_file_path = tmp_job_file.name
+
+        current_app.logger.info(f"Applying Job '{job_name}' from temporary file: {tmp_job_file_path} in namespace '{namespace}' (using current kubectl context)")
+        run_kubectl_command(["kubectl", "apply", "-f", tmp_job_file_path])
+
+        job_succeeded = False
+        max_retries = 30
+        poll_interval = 10
+        pod_name_from_logs_func = None # Initialize
+
+        for attempt in range(max_retries):
+            current_app.logger.info(f"Polling Job '{job_name}' status (attempt {attempt + 1}/{max_retries}), waiting {poll_interval}s...")
+            time.sleep(poll_interval)
+
+            get_job_process = run_kubectl_command([
+                "kubectl", "get", "job", job_name,
+                "--namespace", namespace,
+                "-o", "json"
+            ], check=False)
+
+            if get_job_process.returncode == 0:
+                job_status_data = json.loads(get_job_process.stdout)
+                if job_status_data.get("status", {}).get("succeeded", 0) > 0:
+                    job_succeeded = True
+                    current_app.logger.info(f"Job '{job_name}' succeeded.")
+                    break
+                if job_status_data.get("status", {}).get("failed", 0) > 0:
+                    current_app.logger.error(f"Job '{job_name}' failed. Conditions: {job_status_data.get('status', {}).get('conditions')}")
+                    try:
+                        failed_logs_str, _ = fetch_job_logs(job_name, namespace)
+                        return jsonify({
+                            "error": f"Tester agent job '{job_name}' failed.",
+                            "logs": failed_logs_str,
+                            "metadata": {
+                                "kubernetesJobName": job_name
+                            }
+                        }), 500
+                    except Exception as log_err:
+                        current_app.logger.error(f"Additionally, failed to fetch logs for failed job '{job_name}': {log_err}")
+                        return jsonify({"error": f"Tester agent job '{job_name}' failed. Log retrieval also failed."}), 500
+            else:
+                current_app.logger.warning(f"Failed to get status for job '{job_name}' on attempt {attempt + 1}. Kubectl exit code: {get_job_process.returncode}. Stderr: {get_job_process.stderr}")
+
+        if not job_succeeded:
+            current_app.logger.error(f"Job '{job_name}' did not succeed within the timeout period ({max_retries * poll_interval}s).")
+            return jsonify({"error": f"Tester agent job '{job_name}' timed out."}), 500
+
+        logs_str, pod_name_from_logs_func = fetch_job_logs(job_name, namespace)
+        test_results_data = json.loads(logs_str)
+
+        response_data = {
+            "results": test_results_data,
+            "metadata": {
+                "kubernetesJobName": job_name,
+                "kubernetesPodNames": [pod_name_from_logs_func] if pod_name_from_logs_func else []
             }
-            
-            const destinations = await response.json(); 
-
-            if (!destinations || destinations.length === 0) {
-                console.warn('No prepopulated destinations received from API or API returned empty list.');
-                prepopulatedDestsSelect.innerHTML = '<option value="">No prepopulated destinations found</option>';
-                return;
-            }
-
-            destinations.forEach(dest => {
-                if (dest.name && dest.address) {
-                    const option = document.createElement('option');
-                    option.value = dest.address;
-                    option.textContent = `${dest.name} (${dest.address})`;
-                    prepopulatedDestsSelect.appendChild(option);
-                } else {
-                    console.warn('Received a destination object with missing name or address:', dest);
-                }
-            });
-
-        } catch (error) {
-            console.error('Error fetching prepopulated destinations from API:', error); 
-            prepopulatedDestsSelect.innerHTML = '<option value="">Error loading destinations</option>';
-            if (noResultsMessage) {
-                noResultsMessage.textContent = 'Could not load prepopulated destinations from the backend. Please ensure the backend server is running and check console for details.'; 
-                noResultsMessage.classList.remove('hidden');
-            }
         }
-    }
+        return jsonify(response_data), 200
 
-    populatePrepopulatedDestinations();
+    except FileNotFoundError as e:
+        if hasattr(e, 'filename') and e.filename == JOB_TEMPLATE_PATH :
+             current_app.logger.error(f"Job template file not found: {JOB_TEMPLATE_PATH} - {e.strerror}")
+             return jsonify({"error": f"Server configuration error: Job template not found."}), 500
+        else:
+            current_app.logger.error(f"A file not found error occurred (possibly kubectl): {e.strerror}")
+            return jsonify({"error": "Server execution error: A required command or file was not found."}), 500
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": f"kubectl command execution failed: {e.stderr}"}), 500
+    except Exception as e:
+        current_app.logger.error(f"An unexpected error occurred in /api/test-connectivity: {e}", exc_info=True)
+        return jsonify({"error": "An unexpected error occurred on the server."}), 500
+    finally:
+        if tmp_job_file_path and os.path.exists(tmp_job_file_path):
+            try:
+                os.remove(tmp_job_file_path)
+                current_app.logger.info(f"Deleted temporary job file: {tmp_job_file_path}")
+            except Exception as e_del_tmp:
+                current_app.logger.error(f"Error deleting temporary job file {tmp_job_file_path}: {e_del_tmp}")
 
-    testButton.addEventListener('click', async () => {
-        const source = sourceInput.value.trim(); 
-        const manualDestinations = destinationsTextarea.value.trim().split(/[\s,]+/).filter(Boolean);
-        const selectedPrepopulated = Array.from(prepopulatedDestsSelect.selectedOptions).map(option => option.value);
-
-        const allDestinations = [...new Set([...manualDestinations, ...selectedPrepopulated])]; 
-
-        successfulResultsDiv.innerHTML = '';
-        failedResultsDiv.innerHTML = '';
-        celebrationBanner.classList.add('hidden');
-        celebrationBanner.textContent = '';
-        noResultsMessage.classList.add('hidden');
-        
-        if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
-        if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
-        if (executionDetailsSection) executionDetailsSection.open = false; 
-
-
-        if (!source) {
-            noResultsMessage.textContent = "Error: Source (Kubernetes Cluster Name) cannot be empty. This is a mock field for now.";
-            noResultsMessage.classList.remove('hidden');
-            return;
-        }
-
-        if (allDestinations.length === 0) {
-            noResultsMessage.textContent = "Error: Please provide at least one destination.";
-            noResultsMessage.classList.remove('hidden');
-            return;
-        }
-        
-        successfulResultsDiv.innerHTML = `<p>Requesting tests from backend for destinations: ${allDestinations.join(', ')}...</p>`;
-        
-        try {
-            const response = await fetch('http://localhost:5000/api/test-connectivity', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    destinations: allDestinations
-                }),
-            });
-
-            if (!response.ok) {
-                let errorData;
-                try {
-                    errorData = await response.json();
-                } catch (e) {
-                }
-                const errorMessage = errorData && errorData.error ? errorData.error : `HTTP error! status: ${response.status}`;
-                throw new Error(errorMessage);
-            }
-
-            const responseData = await response.json(); 
-            console.log("[DEBUG] Raw responseData from backend:", responseData); 
-            handleTestResponse(responseData, source); 
-
-        } catch (error) {
-            console.error('Error during connectivity test:', error);
-            failedResultsDiv.innerHTML = ''; 
-            successfulResultsDiv.innerHTML = ''; 
-            noResultsMessage.textContent = `Error during connectivity test: ${error.message}. Please check the console for more details. Ensure the backend is running and reachable.`;
-            noResultsMessage.classList.remove('hidden');
-            celebrationBanner.classList.add('hidden');
-            if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
-            if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
-            if (executionDetailsSection) executionDetailsSection.open = false;
-        }
-    });
-
-    function handleTestResponse(responseData, sourceCluster) { 
-        console.log("[DEBUG] Entering handleTestResponse. responseData:", responseData, "sourceCluster:", sourceCluster);
-        if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
-        if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
-        if (executionDetailsSection) executionDetailsSection.open = !!responseData.metadata;
-
-        if (responseData.metadata) {
-            if (k8sJobNameSpan) k8sJobNameSpan.textContent = responseData.metadata.kubernetesJobName || 'N/A';
-            if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = responseData.metadata.kubernetesPodNames ? responseData.metadata.kubernetesPodNames.join(', ') : 'N/A';
-        }
-        
-        const resultsForDisplay = responseData.results || [];
-        console.log("[DEBUG] In handleTestResponse, about to call displayResults with resultsForDisplay:", resultsForDisplay, "and sourceCluster:", sourceCluster);
-        displayResults(resultsForDisplay, sourceCluster); 
-    }
-
-    function displayResults(results, sourceCluster) { 
-        console.log("[DEBUG] Entering displayResults. Received results:", results, "Type of results:", typeof results, "Is Array:", Array.isArray(results), "sourceCluster:", sourceCluster);
-        successfulResultsDiv.innerHTML = ''; 
-        failedResultsDiv.innerHTML = '';
-        celebrationBanner.classList.add('hidden');
-        celebrationBanner.textContent = '';
-
-        if (!results || results.length === 0) {
-            noResultsMessage.textContent = `No test results to display for ${sourceCluster}. (Backend used its current kubectl context).`;
-            noResultsMessage.classList.remove('hidden');
-            successfulResultsDiv.innerHTML = '<p>None</p>'; 
-            failedResultsDiv.innerHTML = '<p>None</p>';   
-            return;
-        } else {
-            noResultsMessage.classList.add('hidden'); 
-        }
-
-        let failedCount = 0;
-        let successCount = 0;
-
-        results.forEach(result => {
-            const resultElement = document.createElement('div');
-            resultElement.classList.add('result-item');
-            resultElement.innerHTML = `
-                <p><strong>Destination:</strong> ${result.destination}</p>
-                <p><strong>Status:</strong> <span class="status-${result.status.toLowerCase()}">${result.status}</span></p>
-                <p><strong>Details:</strong> ${result.details}</p>
-            `;
-            if (result.status === "SUCCESS") {
-                successfulResultsDiv.appendChild(resultElement);
-                successCount++;
-            } else {
-                failedResultsDiv.appendChild(resultElement);
-                failedCount++;
-            }
-        });
-
-        if (successCount === 0 && results.length > 0) {
-            successfulResultsDiv.innerHTML = '<p>No successful connections.</p>';
-        }
-        if (failedCount === 0 && results.length > 0) {
-            failedResultsDiv.innerHTML = '<p>No failed connections.</p>';
-        }
-        
-        if (failedCount === 0 && successCount > 0) {
-            celebrationBanner.textContent = `🎉 Hooray! All ${successCount} connection(s) from the cluster were successful! 🎉`;
-            celebrationBanner.classList.remove('hidden');
-        }
-    }
-
-    prepopulatedDestsSelect.addEventListener('dblclick', () => {
-        const selectedValues = Array.from(prepopulatedDestsSelect.selectedOptions).map(option => option.value);
-        if (selectedValues.length > 0) {
-            const currentTextDests = destinationsTextarea.value.trim().split(/[\s,]+/).filter(Boolean);
-            const newDests = [...new Set([...currentTextDests, ...selectedValues])];
-            destinationsTextarea.value = newDests.join('\n');
-        }
-    });
-});
+if __name__ == '__main__':
+    if not os.path.exists(JOB_TEMPLATE_PATH):
+        app.logger.warning(f"CRITICAL: Job template file not found at startup: {JOB_TEMPLATE_PATH}. The /api/test-connectivity endpoint will fail.")
+    app.run(debug=True, port=5000)
