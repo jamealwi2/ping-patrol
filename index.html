@@ -16,7 +16,7 @@
         </div>
 
         <div class="form-group">
-            <label for="prepopulated-destinations">Or select from prepopulated list:</label>
+            <label for="prepopulated-destinations">Test Destination:</label>
             <select id="prepopulated-destinations" name="prepopulated-destinations" multiple>
                 <!-- Options will be populated by script.js -->
             </select>
@@ -30,6 +30,15 @@
         <button id="test-button">Test Connectivity</button>
 
         <div class="results">
+            <div class="test-run-details">
+                <details>
+                    <summary>Execution Details</summary>
+                    <div>
+                        <p><strong>Kubernetes Job Name:</strong> <span id="k8s-job-name">-</span></p>
+                        <p><strong>Kubernetes Pod Name(s):</strong> <span id="k8s-pod-names">-</span></p>
+                    </div>
+                </details>
+            </div>
             <div id="celebration-banner" class="hidden"></div>
             <h2>Successful Connections:</h2>
             <div id="successful-results" class="results-category">

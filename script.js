@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const celebrationBanner = document.getElementById('celebration-banner');
     const noResultsMessage = document.getElementById('no-results-message');
 
+    const k8sJobNameSpan = document.getElementById('k8s-job-name');
+    const k8sPodNamesSpan = document.getElementById('k8s-pod-names');
+    const executionDetailsSection = document.querySelector('.test-run-details details');
+
     // Populate prepopulated destinations
     async function populatePrepopulatedDestinations() {
         try {
@@ -49,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populatePrepopulatedDestinations();
 
     testButton.addEventListener('click', async () => {
-        const source = sourceInput.value.trim();
+        const source = sourceInput.value.trim(); // This is still here, but backend doesn't use it. Can be removed if UI is also updated.
         const manualDestinations = destinationsTextarea.value.trim().split(/[\s,]+/).filter(Boolean);
         const selectedPrepopulated = Array.from(prepopulatedDestsSelect.selectedOptions).map(option => option.value);
 
@@ -62,8 +66,15 @@ document.addEventListener('DOMContentLoaded', () => {
         celebrationBanner.textContent = '';
         noResultsMessage.classList.add('hidden');
 
+        if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
+        if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
+        if (executionDetailsSection) executionDetailsSection.open = false; // Start collapsed
+
+
+        // Frontend validation for source input, even if backend doesn't use it currently.
+        // This can be removed if the 'source' input field is removed from HTML.
         if (!source) {
-            noResultsMessage.textContent = "Error: Source (Kubernetes Cluster Name) cannot be empty.";
+            noResultsMessage.textContent = "Error: Source (Kubernetes Cluster Name) cannot be empty. This is a mock field for now.";
             noResultsMessage.classList.remove('hidden');
             return;
         }
@@ -74,11 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Prepare UI for testing
-        successfulResultsDiv.innerHTML = `<p>Requesting tests from backend for ${source} to ${allDestinations.join(', ')}...</p>`;
-        // failedResultsDiv.innerHTML = ''; // Already cleared above
-        // celebrationBanner.classList.add('hidden'); // Already cleared above
-        // noResultsMessage.classList.add('hidden'); // Already cleared above
+        successfulResultsDiv.innerHTML = `<p>Requesting tests from backend for destinations: ${allDestinations.join(', ')}...</p>`;
 
         try {
             const response = await fetch('http://localhost:5000/api/test-connectivity', {
@@ -87,13 +94,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    source: source,
+                    // source: source, // Backend no longer uses 'source' from request body
                     destinations: allDestinations
                 }),
             });
 
             if (!response.ok) {
-                // Try to get error message from backend response body if possible
                 let errorData;
                 try {
                     errorData = await response.json();
@@ -104,34 +110,58 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorMessage);
             }
 
-            const results = await response.json();
-            displayResults(results, source); // Use existing displayResults function
+            const responseData = await response.json();
+            handleTestResponse(responseData, source); // Pass 'source' for display continuity, though backend doesn't use it
 
         } catch (error) {
             console.error('Error during connectivity test:', error);
-            // Display error in the UI
-            failedResultsDiv.innerHTML = ''; // Clear any "testing..." message from successfulResultsDiv if it was used for that
-            successfulResultsDiv.innerHTML = ''; // Clear "Requesting tests..." message
+            failedResultsDiv.innerHTML = '';
+            successfulResultsDiv.innerHTML = '';
             noResultsMessage.textContent = `Error during connectivity test: ${error.message}. Please check the console for more details. Ensure the backend is running and reachable.`;
             noResultsMessage.classList.remove('hidden');
             celebrationBanner.classList.add('hidden');
+            if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
+            if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
+            if (executionDetailsSection) executionDetailsSection.open = false;
         }
     });
 
-    function displayResults(results, sourceCluster) {
-        successfulResultsDiv.innerHTML = ''; // Clear any previous messages like "testing..."
+    function handleTestResponse(responseData, sourceCluster) { // sourceCluster is for display continuity
+        if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
+        if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
+        if (executionDetailsSection) executionDetailsSection.open = !!responseData.metadata;
+
+        if (responseData.metadata) {
+            if (k8sJobNameSpan) k8sJobNameSpan.textContent = responseData.metadata.kubernetesJobName || 'N/A';
+            if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = responseData.metadata.kubernetesPodNames ? responseData.metadata.kubernetesPodNames.join(', ') : 'N/A';
+        }
+
+        // The 'sourceCluster' here is the value from the input field, used for the "Results from..." message.
+        // Backend now uses its own default kubectl context.
+        displayResults(responseData.results || [], sourceCluster);
+    }
+
+    function displayResults(results, sourceCluster) { // sourceCluster is the text from the input field
+        successfulResultsDiv.innerHTML = '';
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
         celebrationBanner.textContent = '';
-        noResultsMessage.classList.add('hidden');
+        // noResultsMessage.classList.add('hidden'); // Keep noResultsMessage if results are empty
 
         if (!results || results.length === 0) {
-            noResultsMessage.textContent = `No test results to display for ${sourceCluster}.`;
+            noResultsMessage.textContent = `No test results to display for ${sourceCluster}. (Backend used its current kubectl context).`;
             noResultsMessage.classList.remove('hidden');
             successfulResultsDiv.innerHTML = '<p>None</p>';
             failedResultsDiv.innerHTML = '<p>None</p>';
+            if (executionDetailsSection && !executionDetailsSection.open) {
+                 // If metadata might have made it open, but no results, keep it open.
+                 // If no metadata and no results, it's fine to be closed.
+            }
             return;
+        } else {
+            noResultsMessage.classList.add('hidden'); // Hide if there are results
         }
+
 
         let failedCount = 0;
         let successCount = 0;
@@ -160,15 +190,8 @@ document.addEventListener('DOMContentLoaded', () => {
             failedResultsDiv.innerHTML = '<p>No failed connections.</p>';
         }
 
-        if (results.length === 0) {
-             noResultsMessage.textContent = `No test results to display for ${sourceCluster}.`;
-             noResultsMessage.classList.remove('hidden');
-             successfulResultsDiv.innerHTML = '<p>None</p>';
-             failedResultsDiv.innerHTML = '<p>None</p>';
-        }
-
         if (failedCount === 0 && successCount > 0) {
-            celebrationBanner.textContent = `🎉 Hooray! All ${successCount} connection(s) from ${sourceCluster} were successful! 🎉`;
+            celebrationBanner.textContent = `🎉 Hooray! All ${successCount} connection(s) from the cluster were successful! 🎉`;
             celebrationBanner.classList.remove('hidden');
         }
     }
