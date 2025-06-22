@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                    source: source, // Ensure this line is present and not commented
                     destinations: allDestinations
                 }),
             });
@@ -164,7 +165,9 @@ document.addEventListener('DOMContentLoaded', () => {
             resultElement.classList.add('result-item');
             
             let durationHtml = '';
-            if (result.duration) {
+            // Ensure result.duration is a non-empty string before displaying.
+            // The Go agent sends "0ms" or "XXms", which are truthy.
+            if (result.duration && result.duration.trim() !== "") {
                 durationHtml = `<p><strong>Duration:</strong> ${result.duration}</p>`;
             }
 
