@@ -16,12 +16,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Populate prepopulated destinations
     async function populatePrepopulatedDestinations() {
         try {
-            const response = await fetch('http://localhost:5000/api/destinations');
+            const response = await fetch('http://localhost:5000/api/destinations'); 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status} while fetching http://localhost:5000/api/destinations`);
             }
-
-            const destinations = await response.json();
+            
+            const destinations = await response.json(); 
 
             if (!destinations || destinations.length === 0) {
                 console.warn('No prepopulated destinations received from API or API returned empty list.');
@@ -41,10 +41,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
         } catch (error) {
-            console.error('Error fetching prepopulated destinations from API:', error);
+            console.error('Error fetching prepopulated destinations from API:', error); 
             prepopulatedDestsSelect.innerHTML = '<option value="">Error loading destinations</option>';
             if (noResultsMessage) {
-                noResultsMessage.textContent = 'Could not load prepopulated destinations from the backend. Please ensure the backend server is running and check console for details.';
+                noResultsMessage.textContent = 'Could not load prepopulated destinations from the backend. Please ensure the backend server is running and check console for details.'; 
                 noResultsMessage.classList.remove('hidden');
             }
         }
@@ -53,21 +53,21 @@ document.addEventListener('DOMContentLoaded', () => {
     populatePrepopulatedDestinations();
 
     testButton.addEventListener('click', async () => {
-        const source = sourceInput.value.trim();
+        const source = sourceInput.value.trim(); 
         const manualDestinations = destinationsTextarea.value.trim().split(/[\s,]+/).filter(Boolean);
         const selectedPrepopulated = Array.from(prepopulatedDestsSelect.selectedOptions).map(option => option.value);
 
-        const allDestinations = [...new Set([...manualDestinations, ...selectedPrepopulated])];
+        const allDestinations = [...new Set([...manualDestinations, ...selectedPrepopulated])]; 
 
         successfulResultsDiv.innerHTML = '';
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
         celebrationBanner.textContent = '';
         noResultsMessage.classList.add('hidden');
-
+        
         if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
         if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
-        if (executionDetailsSection) executionDetailsSection.open = false;
+        if (executionDetailsSection) executionDetailsSection.open = false; 
 
 
         if (!source) {
@@ -81,9 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
             noResultsMessage.classList.remove('hidden');
             return;
         }
-
+        
         successfulResultsDiv.innerHTML = `<p>Requesting tests from backend for destinations: ${allDestinations.join(', ')}...</p>`;
-
+        
         try {
             const response = await fetch('http://localhost:5000/api/test-connectivity', {
                 method: 'POST',
@@ -105,14 +105,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorMessage);
             }
 
-            const responseData = await response.json();
-            console.log("[DEBUG] Raw responseData from backend:", responseData);
-            handleTestResponse(responseData, source);
+            const responseData = await response.json(); 
+            console.log("[DEBUG] Raw responseData from backend:", responseData); 
+            handleTestResponse(responseData, source); 
 
         } catch (error) {
             console.error('Error during connectivity test:', error);
-            failedResultsDiv.innerHTML = '';
-            successfulResultsDiv.innerHTML = '';
+            failedResultsDiv.innerHTML = ''; 
+            successfulResultsDiv.innerHTML = ''; 
             noResultsMessage.textContent = `Error during connectivity test: ${error.message}. Please check the console for more details. Ensure the backend is running and reachable.`;
             noResultsMessage.classList.remove('hidden');
             celebrationBanner.classList.add('hidden');
@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function handleTestResponse(responseData, sourceCluster) {
+    function handleTestResponse(responseData, sourceCluster) { 
         console.log("[DEBUG] Entering handleTestResponse. responseData:", responseData, "sourceCluster:", sourceCluster);
         if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
         if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
@@ -132,15 +132,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (k8sJobNameSpan) k8sJobNameSpan.textContent = responseData.metadata.kubernetesJobName || 'N/A';
             if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = responseData.metadata.kubernetesPodNames ? responseData.metadata.kubernetesPodNames.join(', ') : 'N/A';
         }
-
+        
         const resultsForDisplay = responseData.results || [];
         console.log("[DEBUG] In handleTestResponse, about to call displayResults with resultsForDisplay:", resultsForDisplay, "and sourceCluster:", sourceCluster);
-        displayResults(resultsForDisplay, sourceCluster);
+        displayResults(resultsForDisplay, sourceCluster); 
     }
 
-    function displayResults(results, sourceCluster) {
+    function displayResults(results, sourceCluster) { 
         console.log("[DEBUG] Entering displayResults. Received results:", results, "Type of results:", typeof results, "Is Array:", Array.isArray(results), "sourceCluster:", sourceCluster);
-        successfulResultsDiv.innerHTML = '';
+        successfulResultsDiv.innerHTML = ''; 
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
         celebrationBanner.textContent = '';
@@ -148,20 +148,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!results || results.length === 0) {
             noResultsMessage.textContent = `No test results to display for ${sourceCluster}. (Backend used its current kubectl context).`;
             noResultsMessage.classList.remove('hidden');
-            successfulResultsDiv.innerHTML = '<p>None</p>';
-            failedResultsDiv.innerHTML = '<p>None</p>';
+            successfulResultsDiv.innerHTML = '<p>None</p>'; 
+            failedResultsDiv.innerHTML = '<p>None</p>';   
             return;
         } else {
-            noResultsMessage.classList.add('hidden');
+            noResultsMessage.classList.add('hidden'); 
         }
 
         let failedCount = 0;
         let successCount = 0;
 
         results.forEach(result => {
+            console.log("[DEBUG] Individual result object:", result); // <--- ADD THIS LINE
             const resultElement = document.createElement('div');
             resultElement.classList.add('result-item');
-
+            
             let durationHtml = '';
             if (result.duration) {
                 durationHtml = `<p><strong>Duration:</strong> ${result.duration}</p>`;
@@ -188,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (failedCount === 0 && results.length > 0) {
             failedResultsDiv.innerHTML = '<p>No failed connections.</p>';
         }
-
+        
         if (failedCount === 0 && successCount > 0) {
             celebrationBanner.textContent = `🎉 Hooray! All ${successCount} connection(s) from the cluster were successful! 🎉`;
             celebrationBanner.classList.remove('hidden');
