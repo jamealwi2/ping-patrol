@@ -99,7 +99,7 @@ def test_connectivity():
 
     destinations = data.get('destinations')
     namespace = "application"
-    docker_image = "docker.branch.io/tester-agent:beta.0"
+    docker_image = "docker.branch.io/tester-agent:vbeta.1"
 
     if not destinations or not isinstance(destinations, list) or len(destinations) == 0:
         return jsonify({"error": "Missing or invalid 'destinations' list in request"}), 400
