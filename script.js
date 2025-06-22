@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
+                    source: source, // Ensure this line is present and not commented
                     destinations: allDestinations
                 }),
             });
@@ -159,11 +160,14 @@ document.addEventListener('DOMContentLoaded', () => {
         let successCount = 0;
 
         results.forEach(result => {
+            console.log("[DEBUG] Loop item - result object:", result); // ENSURE THIS IS THE FIRST LINE
             const resultElement = document.createElement('div');
             resultElement.classList.add('result-item');
 
             let durationHtml = '';
-            if (result.duration) {
+            // Ensure result.duration is a non-empty string before displaying.
+            // The Go agent sends "0ms" or "XXms", which are truthy.
+            if (result.duration && result.duration.trim() !== "") {
                 durationHtml = `<p><strong>Duration:</strong> ${result.duration}</p>`;
             }
 

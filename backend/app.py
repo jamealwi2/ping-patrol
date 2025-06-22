@@ -64,12 +64,13 @@ def run_kubectl_command(command_args, check=True):
         current_app.logger.error(f"kubectl command not found. Ensure kubectl is installed and in PATH for command: {' '.join(command_args)}")
         raise
 
-def fetch_job_logs(job_name, namespace):
+def fetch_job_logs(job_name, namespace, context):
     """Helper function to fetch logs for a given job. Returns logs and pod name."""
-    current_app.logger.info(f"Fetching logs for job '{job_name}' in namespace '{namespace}'.")
+    current_app.logger.info(f"Fetching logs for job '{job_name}' in namespace '{namespace}' on context '{context}'.")
     get_pods_process = run_kubectl_command([
         "kubectl", "get", "pods",
         "--namespace", namespace,
+        "--context", context,
         "-l", f"job-name={job_name}",
         "-o", "json"
     ])
@@ -87,6 +88,7 @@ def fetch_job_logs(job_name, namespace):
         "kubectl", "logs", pod_name,
         "-c", container_name,
         "--namespace", namespace,
+        "--context", context,
         "--tail=-1"
     ])
     return logs_process.stdout, pod_name
@@ -97,14 +99,17 @@ def test_connectivity():
     if not data:
         return jsonify({"error": "No input data provided"}), 400
 
+    source_cluster_context = data.get('source')
     destinations = data.get('destinations')
     namespace = "application"
     docker_image = "docker.branch.io/tester-agent:vbeta.1"
 
+    if not source_cluster_context:
+        return jsonify({"error": "Missing 'source' (kubectl context) in request"}), 400
     if not destinations or not isinstance(destinations, list) or len(destinations) == 0:
         return jsonify({"error": "Missing or invalid 'destinations' list in request"}), 400
 
-    current_app.logger.info(f"Received test request for destinations: {', '.join(destinations)} (using current kubectl context)")
+    current_app.logger.info(f"Received test request for context: {source_cluster_context} for destinations: {', '.join(destinations)}")
 
     unique_job_id = str(uuid.uuid4())[:8]
     job_name = f"ping-patrol-tester-job-{unique_job_id}"
@@ -137,8 +142,8 @@ def test_connectivity():
             yaml.dump(job_yaml_template, tmp_job_file)
             tmp_job_file_path = tmp_job_file.name
 
-        current_app.logger.info(f"Applying Job '{job_name}' from temporary file: {tmp_job_file_path} in namespace '{namespace}' (using current kubectl context)")
-        run_kubectl_command(["kubectl", "apply", "-f", tmp_job_file_path])
+        current_app.logger.info(f"Applying Job '{job_name}' from temporary file: {tmp_job_file_path} to context '{source_cluster_context}' in namespace '{namespace}'")
+        run_kubectl_command(["kubectl", "apply", "-f", tmp_job_file_path, "--context", source_cluster_context])
 
         job_succeeded = False
         max_retries = 30
@@ -152,6 +157,7 @@ def test_connectivity():
             get_job_process = run_kubectl_command([
                 "kubectl", "get", "job", job_name,
                 "--namespace", namespace,
+                "--context", source_cluster_context,
                 "-o", "json"
             ], check=False)
 
@@ -164,7 +170,7 @@ def test_connectivity():
                 if job_status_data.get("status", {}).get("failed", 0) > 0:
                     current_app.logger.error(f"Job '{job_name}' failed. Conditions: {job_status_data.get('status', {}).get('conditions')}")
                     try:
-                        failed_logs_str, _ = fetch_job_logs(job_name, namespace)
+                        failed_logs_str, _ = fetch_job_logs(job_name, namespace, source_cluster_context)
                         return jsonify({
                             "error": f"Tester agent job '{job_name}' failed.",
                             "logs": failed_logs_str,
@@ -182,7 +188,7 @@ def test_connectivity():
             current_app.logger.error(f"Job '{job_name}' did not succeed within the timeout period ({max_retries * poll_interval}s).")
             return jsonify({"error": f"Tester agent job '{job_name}' timed out."}), 500
 
-        logs_str, pod_name_from_logs_func = fetch_job_logs(job_name, namespace)
+        logs_str, pod_name_from_logs_func = fetch_job_logs(job_name, namespace, source_cluster_context)
         test_results_data = json.loads(logs_str)
 
         response_data = {
