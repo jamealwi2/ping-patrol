@@ -53,13 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
     populatePrepopulatedDestinations();
 
     testButton.addEventListener('click', async () => {
-        const source = sourceInput.value.trim(); // This is still here, but backend doesn't use it. Can be removed if UI is also updated.
+        const source = sourceInput.value.trim();
         const manualDestinations = destinationsTextarea.value.trim().split(/[\s,]+/).filter(Boolean);
         const selectedPrepopulated = Array.from(prepopulatedDestsSelect.selectedOptions).map(option => option.value);
 
         const allDestinations = [...new Set([...manualDestinations, ...selectedPrepopulated])];
 
-        // Clear previous results from display areas
         successfulResultsDiv.innerHTML = '';
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
@@ -68,11 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
         if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
-        if (executionDetailsSection) executionDetailsSection.open = false; // Start collapsed
+        if (executionDetailsSection) executionDetailsSection.open = false;
 
 
-        // Frontend validation for source input, even if backend doesn't use it currently.
-        // This can be removed if the 'source' input field is removed from HTML.
         if (!source) {
             noResultsMessage.textContent = "Error: Source (Kubernetes Cluster Name) cannot be empty. This is a mock field for now.";
             noResultsMessage.classList.remove('hidden');
@@ -94,7 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    // source: source, // Backend no longer uses 'source' from request body
                     destinations: allDestinations
                 }),
             });
@@ -104,14 +100,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     errorData = await response.json();
                 } catch (e) {
-                    // Ignore if response is not JSON
                 }
                 const errorMessage = errorData && errorData.error ? errorData.error : `HTTP error! status: ${response.status}`;
                 throw new Error(errorMessage);
             }
 
             const responseData = await response.json();
-            handleTestResponse(responseData, source); // Pass 'source' for display continuity, though backend doesn't use it
+            console.log("[DEBUG] Raw responseData from backend:", responseData);
+            handleTestResponse(responseData, source);
 
         } catch (error) {
             console.error('Error during connectivity test:', error);
@@ -126,7 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function handleTestResponse(responseData, sourceCluster) { // sourceCluster is for display continuity
+    function handleTestResponse(responseData, sourceCluster) {
+        console.log("[DEBUG] Entering handleTestResponse. responseData:", responseData, "sourceCluster:", sourceCluster);
         if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
         if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
         if (executionDetailsSection) executionDetailsSection.open = !!responseData.metadata;
@@ -136,32 +133,27 @@ document.addEventListener('DOMContentLoaded', () => {
             if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = responseData.metadata.kubernetesPodNames ? responseData.metadata.kubernetesPodNames.join(', ') : 'N/A';
         }
 
-        // The 'sourceCluster' here is the value from the input field, used for the "Results from..." message.
-        // Backend now uses its own default kubectl context.
-        displayResults(responseData.results || [], sourceCluster);
+        const resultsForDisplay = responseData.results || [];
+        console.log("[DEBUG] In handleTestResponse, about to call displayResults with resultsForDisplay:", resultsForDisplay, "and sourceCluster:", sourceCluster);
+        displayResults(resultsForDisplay, sourceCluster);
     }
 
-    function displayResults(results, sourceCluster) { // sourceCluster is the text from the input field
+    function displayResults(results, sourceCluster) {
+        console.log("[DEBUG] Entering displayResults. Received results:", results, "Type of results:", typeof results, "Is Array:", Array.isArray(results), "sourceCluster:", sourceCluster);
         successfulResultsDiv.innerHTML = '';
         failedResultsDiv.innerHTML = '';
         celebrationBanner.classList.add('hidden');
         celebrationBanner.textContent = '';
-        // noResultsMessage.classList.add('hidden'); // Keep noResultsMessage if results are empty
 
         if (!results || results.length === 0) {
             noResultsMessage.textContent = `No test results to display for ${sourceCluster}. (Backend used its current kubectl context).`;
             noResultsMessage.classList.remove('hidden');
             successfulResultsDiv.innerHTML = '<p>None</p>';
             failedResultsDiv.innerHTML = '<p>None</p>';
-            if (executionDetailsSection && !executionDetailsSection.open) {
-                 // If metadata might have made it open, but no results, keep it open.
-                 // If no metadata and no results, it's fine to be closed.
-            }
             return;
         } else {
-            noResultsMessage.classList.add('hidden'); // Hide if there are results
+            noResultsMessage.classList.add('hidden');
         }
-
 
         let failedCount = 0;
         let successCount = 0;
