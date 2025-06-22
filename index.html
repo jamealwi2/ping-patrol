@@ -30,15 +30,6 @@
         <button id="test-button">Test Connectivity</button>
 
         <div class="results">
-            <div class="test-run-details">
-                <details>
-                    <summary>Execution Details</summary>
-                    <div>
-                        <p><strong>Kubernetes Job Name:</strong> <span id="k8s-job-name">-</span></p>
-                        <p><strong>Kubernetes Pod Name(s):</strong> <span id="k8s-pod-names">-</span></p>
-                    </div>
-                </details>
-            </div>
             <div id="celebration-banner" class="hidden"></div>
             <h2>Successful Connections:</h2>
             <div id="successful-results" class="results-category">
@@ -50,6 +41,15 @@
             </div>
             <div id="no-results-message" class="hidden">
                 <p>No results to display yet, or no tests run.</p>
+            </div>
+            <div class="test-run-details">
+                <details>
+                    <summary>Execution Details</summary>
+                    <div>
+                        <p><strong>Kubernetes Job Name:</strong> <span id="k8s-job-name">-</span></p>
+                        <p><strong>Kubernetes Pod Name(s):</strong> <span id="k8s-pod-names">-</span></p>
+                    </div>
+                </details>
             </div>
         </div>
     </div>

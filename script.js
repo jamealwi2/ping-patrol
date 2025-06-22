@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populatePrepopulatedDestinations();
 
     testButton.addEventListener('click', async () => {
-        const source = sourceInput.value.trim(); 
+        const source = sourceInput.value.trim();
         const manualDestinations = destinationsTextarea.value.trim().split(/[\s,]+/).filter(Boolean);
         const selectedPrepopulated = Array.from(prepopulatedDestsSelect.selectedOptions).map(option => option.value);
 
@@ -67,8 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
         if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
-        if (executionDetailsSection) executionDetailsSection.open = false; 
-
+        if (executionDetailsSection) executionDetailsSection.open = false;
 
         if (!source) {
             noResultsMessage.textContent = "Error: Source (Kubernetes Cluster Name) cannot be empty. This is a mock field for now.";
@@ -105,9 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errorMessage);
             }
 
-            const responseData = await response.json(); 
-            console.log("[DEBUG] Raw responseData from backend:", responseData); 
-            handleTestResponse(responseData, source); 
+            const responseData = await response.json();
+            console.log("[DEBUG] Raw responseData from backend:", responseData);
+            handleTestResponse(responseData, source);
 
         } catch (error) {
             console.error('Error during connectivity test:', error);
@@ -122,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function handleTestResponse(responseData, sourceCluster) { 
+    function handleTestResponse(responseData, sourceCluster) {
         console.log("[DEBUG] Entering handleTestResponse. responseData:", responseData, "sourceCluster:", sourceCluster);
         if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
         if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
@@ -132,10 +131,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (k8sJobNameSpan) k8sJobNameSpan.textContent = responseData.metadata.kubernetesJobName || 'N/A';
             if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = responseData.metadata.kubernetesPodNames ? responseData.metadata.kubernetesPodNames.join(', ') : 'N/A';
         }
-        
+
         const resultsForDisplay = responseData.results || [];
         console.log("[DEBUG] In handleTestResponse, about to call displayResults with resultsForDisplay:", resultsForDisplay, "and sourceCluster:", sourceCluster);
-        displayResults(resultsForDisplay, sourceCluster); 
+        displayResults(resultsForDisplay, sourceCluster);
     }
 
     function displayResults(results, sourceCluster) { 
@@ -148,6 +147,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!results || results.length === 0) {
             noResultsMessage.textContent = `No test results to display for ${sourceCluster}. (Backend used its current kubectl context).`;
             noResultsMessage.classList.remove('hidden');
+            successfulResultsDiv.innerHTML = '<p>None</p>';
+            failedResultsDiv.innerHTML = '<p>None</p>';
+            return;
+        } else {
+            noResultsMessage.classList.add('hidden');
             successfulResultsDiv.innerHTML = '<p>None</p>'; 
             failedResultsDiv.innerHTML = '<p>None</p>';   
             return;
