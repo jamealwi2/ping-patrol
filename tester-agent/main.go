@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net"
-	"net/http" // Added
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -15,9 +15,9 @@ import (
 // Ensure JSON tags match frontend expectations.
 type DestinationTestResult struct {
 	Destination string `json:"destination"`
-	Status      string `json:"status"`    // e.g., "SUCCESS", "FAILED"
-	Details     string `json:"details"`   // More specific information
-	// Error       string `json:"error,omitempty"` // Optional: if there was an error during the test itself
+	Status      string `json:"status"`
+	Details     string `json:"details"`
+	Duration    string `json:"duration,omitempty"` // Added
 }
 
 // TestRunResults is a collection of all test results.
@@ -27,40 +27,45 @@ type DestinationTestResult struct {
 // For now, we'll aim to output a []DestinationTestResult directly.
 
 // performTCPCheck attempts to connect to a given host and port.
-// Returns status ("SUCCESS" or "FAILED") and details.
-func performTCPCheck(destination string) (string, string) {
-	// Default timeout for the connection attempt
-	timeout := 5 * time.Second // Configurable if needed later
-
+// Returns status, details, and duration string.
+func performTCPCheck(destination string) (string, string, string) {
+	timeout := 5 * time.Second
+	start := time.Now() // Record start time
 	conn, err := net.DialTimeout("tcp", destination, timeout)
+	duration := time.Since(start) // Calculate duration
+	durationStr := fmt.Sprintf("%.0fms", duration.Seconds()*1000) // Format to milliseconds
+
 	if err != nil {
 		// Could be a variety of errors: refused, timeout, host not found, etc.
-		return "FAILED", fmt.Sprintf("TCP connection to %s failed: %v", destination, err)
+		return "FAILED", fmt.Sprintf("TCP connection to %s failed: %v", destination, err), durationStr
 	}
 	defer conn.Close() // Ensure the connection is closed
-	return "SUCCESS", fmt.Sprintf("TCP connection to %s successful.", destination)
+	return "SUCCESS", fmt.Sprintf("TCP connection to %s successful.", destination), durationStr
 }
 
 // performHTTPGetCheck attempts to make a GET request to a given URL.
-// Returns status ("SUCCESS" or "FAILED") and details.
-func performHTTPGetCheck(url string) (string, string) {
-	timeout := 10 * time.Second // Configurable if needed later
+// Returns status, details, and duration string.
+func performHTTPGetCheck(url string) (string, string, string) {
+	timeout := 10 * time.Second
 	client := http.Client{
 		Timeout: timeout,
 	}
 
+	start := time.Now() // Record start time
 	resp, err := client.Get(url)
+	duration := time.Since(start) // Calculate duration
+	durationStr := fmt.Sprintf("%.0fms", duration.Seconds()*1000) // Format to milliseconds
+
 	if err != nil {
-		return "FAILED", fmt.Sprintf("HTTP GET request to %s failed: %v", url, err)
+		return "FAILED", fmt.Sprintf("HTTP GET request to %s failed: %v", url, err), durationStr
 	}
 	defer resp.Body.Close()
 
 	// We consider any 2xx status code as success for a basic check.
-	// More specific checks (e.g., for 200 OK only) can be added if needed.
 	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
-		return "SUCCESS", fmt.Sprintf("HTTP GET request to %s successful (Status: %s).", url, resp.Status)
+		return "SUCCESS", fmt.Sprintf("HTTP GET request to %s successful (Status: %s).", url, resp.Status), durationStr
 	}
-	return "FAILED", fmt.Sprintf("HTTP GET request to %s returned non-success status: %s.", url, resp.Status)
+	return "FAILED", fmt.Sprintf("HTTP GET request to %s returned non-success status: %s.", url, resp.Status), durationStr
 }
 
 func main() {
@@ -69,17 +74,15 @@ func main() {
 
 	if *destinationsStr == "" {
 		fmt.Fprintln(os.Stderr, "Error: --destinations flag is required and cannot be empty.")
-		os.Exit(1) // Exit with error code if no destinations are provided
+		os.Exit(1)
 	}
 
-	// Split the comma-separated string into a slice of individual destination strings
 	destinations := strings.Split(*destinationsStr, ",")
 	if len(destinations) == 0 {
 		fmt.Fprintln(os.Stderr, "Error: No destinations provided after splitting.")
 		os.Exit(1)
 	}
 
-	// Trim whitespace from each destination
 	for i, dest := range destinations {
 		destinations[i] = strings.TrimSpace(dest)
 	}
@@ -90,18 +93,17 @@ func main() {
 			continue
 		}
 
-		var status, details string
+		var status, details, durationStr string // Add durationStr
 
 		if strings.HasPrefix(dest, "http://") || strings.HasPrefix(dest, "https://") {
-			status, details = performHTTPGetCheck(dest)
+			status, details, durationStr = performHTTPGetCheck(dest) // Capture durationStr
 		} else {
-			// Assume TCP check for "host:port" format
-			// Basic validation: check if it contains a colon, otherwise it's ambiguous
 			if !strings.Contains(dest, ":") {
 				status = "FAILED"
 				details = fmt.Sprintf("Invalid destination format for TCP check: '%s'. Expected 'host:port'.", dest)
+				durationStr = "0ms" // Or some indicator that test wasn't really run
 			} else {
-				status, details = performTCPCheck(dest)
+				status, details, durationStr = performTCPCheck(dest) // Capture durationStr
 			}
 		}
 
@@ -109,11 +111,11 @@ func main() {
 			Destination: dest,
 			Status:      status,
 			Details:     details,
+			Duration:    durationStr, // Assign duration
 		})
 	}
 
-	// Marshal results to JSON and print to stdout
-	jsonData, err := json.MarshalIndent(results, "", "  ") // Use MarshalIndent for pretty print
+	jsonData, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
 		os.Exit(1)
