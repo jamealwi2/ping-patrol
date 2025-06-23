@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const executionDetailsSection = document.querySelector('.test-run-details details');
 
     const downloadCsvButton = document.getElementById('download-csv-button');
+    const selectAllDestsButton = document.getElementById('select-all-dests-button');
     let latestTestResults = [];
 
     // Populate prepopulated destinations
@@ -166,11 +167,9 @@ document.addEventListener('DOMContentLoaded', () => {
             noResultsMessage.classList.remove('hidden');
             successfulResultsDiv.innerHTML = '<p>None</p>';
             failedResultsDiv.innerHTML = '<p>None</p>';
-            // downloadCsvButton.classList.add('hidden'); // Already handled in handleTestResponse
             return;
         } else {
             noResultsMessage.classList.add('hidden');
-            // downloadCsvButton.classList.remove('hidden'); // Already handled in handleTestResponse
         }
 
         let failedCount = 0;
@@ -274,6 +273,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (downloadCsvButton) {
         downloadCsvButton.addEventListener('click', downloadResultsCSV);
+    }
+
+    if (selectAllDestsButton && prepopulatedDestsSelect) {
+        selectAllDestsButton.addEventListener('click', () => {
+            for (let i = 0; i < prepopulatedDestsSelect.options.length; i++) {
+                prepopulatedDestsSelect.options[i].selected = true;
+            }
+        });
     }
 
     prepopulatedDestsSelect.addEventListener('dblclick', () => {

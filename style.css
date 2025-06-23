@@ -191,3 +191,20 @@ button:hover {
 #download-csv-button:hover {
     background-color: #218838; /* Darker green on hover */
 }
+
+/* Select All Destinations Button Styling */
+#select-all-dests-button {
+    background-color: #6c757d; /* A neutral secondary button color */
+    color: white;
+    padding: 6px 12px; /* Smaller padding than main action buttons */
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    margin-top: 8px; /* Consistent margin */
+    display: inline-block;
+}
+
+#select-all-dests-button:hover {
+    background-color: #5a6268; /* Darker on hover */
+}
