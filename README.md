@@ -25,7 +25,7 @@ Ping Patrol consists of three main components:
 
 3.  **Tester Agent (Go - `tester-agent/`)**:
     *   A command-line application written in Go.
-    *   Packaged as a Docker image: `docker.branch.io/tester-agent:beta.0`.
+    *   Packaged as a Docker image: `docker.branch.io/tester-agent:vbeta.1`.
     *   Designed to be run as a Kubernetes Job.
     *   Receives a comma-separated list of destinations via the `--destinations` command-line argument.
     *   Performs the actual network checks:
@@ -51,7 +51,7 @@ Ping Patrol consists of three main components:
 *   **Docker (Optional - for building Tester Agent locally)**: If you intend to build the `tester-agent` Docker image yourself.
 *   **Access to deploy Jobs to the `application` namespace** in your target Kubernetes cluster.
 *   **Network access from your Kubernetes cluster** to the destinations you intend to test.
-*   The Docker image `docker.branch.io/tester-agent:beta.0` must be accessible to your Kubernetes cluster.
+*   The Docker image `docker.branch.io/tester-agent:vbeta.1` must be accessible to your Kubernetes cluster.
 
 ## Setup & Running the Application
 
@@ -93,10 +93,6 @@ Ping Patrol consists of three main components:
 
 ### Frontend Setup
 
-You have two options for serving the frontend:
-
-**Option 1: Using a Local Python HTTP Server (No Frontend Containerization)**
-
 *   Open a **new terminal window**.
 *   Navigate to the **project root directory** (the one containing `index.html`).
 *   Serve the frontend files using a simple HTTP server:
@@ -105,27 +101,10 @@ You have two options for serving the frontend:
     # Or any other simple HTTP server
     ```
 *   Keep this terminal open.
-*   *Note: If using this method, and your backend is running on `localhost:5000`, ensure `script.js` API calls point to `http://localhost:5000`. The current version of `script.js` uses `http://host.docker.internal:5000` for Option 2.*
-
-**Option 2: Using a Docker Container (Recommended for Docker Desktop Users)**
-
-This method uses the `Dockerfile` in the project root to serve the frontend via Nginx. The `script.js` has been configured to use `http://host.docker.internal:5000` to reach the backend running on your Mac/Windows host.
-
-*   **Build the Frontend Docker Image:**
-    From the project root directory:
-    ```bash
-    docker build -t ping-patrol-frontend .
-    ```
-*   **Run the Frontend Docker Container:**
-    ```bash
-    docker run -d -p 8000:80 ping-patrol-frontend
-    ```
-    This will run the frontend container in detached mode and map port 8000 on your host to port 80 in the container (where Nginx is listening).
-*   **Accessing the Backend:** The `script.js` within this Docker image is configured to make API calls to `http://host.docker.internal:5000`. `host.docker.internal` is a special DNS name provided by Docker Desktop (for Mac and Windows) that resolves to the host machine's IP address from within a container. This allows the containerized frontend to communicate with the backend Flask application running directly on your host machine. If your backend is running on a different port, you would need to adjust `script.js` accordingly and rebuild the frontend image. For Docker on Linux (not Docker Desktop), if the backend is listening on `0.0.0.0:5000`, `http://localhost:5000` might work if the container uses host networking, or you might need to use the host's actual IP address found via `ip addr show docker0`.
 
 ## Access Ping Patrol
 
-*   Open your web browser and go to `http://localhost:8000` (or the port your frontend server/container is mapped to).
+*   Open your web browser and go to `http://localhost:8000` (or the port your frontend Python HTTP server is using).
 
 ## How it Works
 
