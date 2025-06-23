@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const k8sPodNamesSpan = document.getElementById('k8s-pod-names');
     const executionDetailsSection = document.querySelector('.test-run-details details');
 
+    const downloadCsvButton = document.getElementById('download-csv-button');
+    let latestTestResults = [];
+
     // Populate prepopulated destinations
     async function populatePrepopulatedDestinations() {
         try {
@@ -68,6 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
         if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
         if (executionDetailsSection) executionDetailsSection.open = false;
+        if (downloadCsvButton) downloadCsvButton.classList.add('hidden');
+        latestTestResults = [];
 
 
         if (!source) {
@@ -91,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    source: source, // Ensure this line is present and not commented
+                    source: source,
                     destinations: allDestinations
                 }),
             });
@@ -120,6 +125,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (k8sJobNameSpan) k8sJobNameSpan.textContent = '-';
             if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = '-';
             if (executionDetailsSection) executionDetailsSection.open = false;
+            if (downloadCsvButton) downloadCsvButton.classList.add('hidden');
+            latestTestResults = [];
         }
     });
 
@@ -134,7 +141,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (k8sPodNamesSpan) k8sPodNamesSpan.textContent = responseData.metadata.kubernetesPodNames ? responseData.metadata.kubernetesPodNames.join(', ') : 'N/A';
         }
 
-        const resultsForDisplay = responseData.results || [];
+        latestTestResults = responseData.results || [];
+
+        if (latestTestResults.length > 0) {
+            if (downloadCsvButton) downloadCsvButton.classList.remove('hidden');
+        } else {
+            if (downloadCsvButton) downloadCsvButton.classList.add('hidden');
+        }
+
+        const resultsForDisplay = latestTestResults;
         console.log("[DEBUG] In handleTestResponse, about to call displayResults with resultsForDisplay:", resultsForDisplay, "and sourceCluster:", sourceCluster);
         displayResults(resultsForDisplay, sourceCluster);
     }
@@ -151,22 +166,22 @@ document.addEventListener('DOMContentLoaded', () => {
             noResultsMessage.classList.remove('hidden');
             successfulResultsDiv.innerHTML = '<p>None</p>';
             failedResultsDiv.innerHTML = '<p>None</p>';
+            // downloadCsvButton.classList.add('hidden'); // Already handled in handleTestResponse
             return;
         } else {
             noResultsMessage.classList.add('hidden');
+            // downloadCsvButton.classList.remove('hidden'); // Already handled in handleTestResponse
         }
 
         let failedCount = 0;
         let successCount = 0;
 
         results.forEach(result => {
-            console.log("[DEBUG] Loop item - result object:", result); // ENSURE THIS IS THE FIRST LINE
+            console.log("[DEBUG] Loop item - result object:", result);
             const resultElement = document.createElement('div');
             resultElement.classList.add('result-item');
 
             let durationHtml = '';
-            // Ensure result.duration is a non-empty string before displaying.
-            // The Go agent sends "0ms" or "XXms", which are truthy.
             if (result.duration && result.duration.trim() !== "") {
                 durationHtml = `<p><strong>Duration:</strong> ${result.duration}</p>`;
             }
@@ -197,6 +212,68 @@ document.addEventListener('DOMContentLoaded', () => {
             celebrationBanner.textContent = `🎉 Hooray! All ${successCount} connection(s) from the cluster were successful! 🎉`;
             celebrationBanner.classList.remove('hidden');
         }
+    }
+
+    function escapeCSVField(field) {
+        if (field === null || field === undefined) {
+            return '';
+        }
+        let stringField = String(field);
+        if (stringField.includes(',') || stringField.includes('\n') || stringField.includes('"')) {
+            stringField = stringField.replace(/"/g, '""');
+            return `"${stringField}"`;
+        }
+        return stringField;
+    }
+
+    function generateCSVContent(results) {
+        if (!results || results.length === 0) {
+            return '';
+        }
+        const headers = ["Destination", "Status", "Duration", "Details"];
+        let csvString = headers.map(escapeCSVField).join(',') + '\r\n';
+
+        results.forEach(result => {
+            const row = [
+                result.destination,
+                result.status,
+                result.duration || '',
+                result.details
+            ];
+            csvString += row.map(escapeCSVField).join(',') + '\r\n';
+        });
+        return csvString;
+    }
+
+    function downloadResultsCSV() {
+        if (latestTestResults.length === 0) {
+            alert("No results to download.");
+            return;
+        }
+        const csvContent = generateCSVContent(latestTestResults);
+        if (!csvContent) {
+            alert("Failed to generate CSV content.");
+            return;
+        }
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "ping-patrol-results.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } else {
+            alert("CSV download is not supported by your browser.");
+        }
+    }
+
+    if (downloadCsvButton) {
+        downloadCsvButton.addEventListener('click', downloadResultsCSV);
     }
 
     prepopulatedDestsSelect.addEventListener('dblclick', () => {
