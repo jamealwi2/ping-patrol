@@ -173,3 +173,21 @@ button:hover {
     text-align: center;
     margin-bottom: 20px;
 }
+
+/* Download Button Styling */
+#download-csv-button {
+    background-color: #28a745; /* Green background */
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px; /* Space above the button */
+    margin-bottom: 20px; /* Space below the button, before results */
+    display: inline-block; /* Or block if you want it full width */
+}
+
+#download-csv-button:hover {
+    background-color: #218838; /* Darker green on hover */
+}
