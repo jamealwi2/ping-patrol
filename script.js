@@ -275,11 +275,27 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadCsvButton.addEventListener('click', downloadResultsCSV);
     }
 
-    if (selectAllDestsButton && prepopulatedDestsSelect) {
+    if (selectAllDestsButton && prepopulatedDestsSelect && destinationsTextarea) { // Added destinationsTextarea check
         selectAllDestsButton.addEventListener('click', () => {
+            const allPrepopulatedValues = [];
             for (let i = 0; i < prepopulatedDestsSelect.options.length; i++) {
                 prepopulatedDestsSelect.options[i].selected = true;
+                // Collect all values from the prepopulated list, as they are all now selected
+                if (prepopulatedDestsSelect.options[i].value) { // Ensure option has a value
+                    allPrepopulatedValues.push(prepopulatedDestsSelect.options[i].value);
+                }
             }
+
+            // Now, update the textarea, similar to the dblclick handler
+            const currentTextDests = destinationsTextarea.value.trim().split(/[\s,]+/).filter(Boolean);
+            // Combine with all values from the prepopulated list, ensuring uniqueness
+            const newDests = [...new Set([...currentTextDests, ...allPrepopulatedValues])];
+            destinationsTextarea.value = newDests.join('\n');
+
+            // Optional: Trigger a change event on prepopulatedDestsSelect if needed by other logic
+            // prepopulatedDestsSelect.dispatchEvent(new Event('change'));
+            // Optional: Trigger an input event on destinationsTextarea if needed
+            // destinationsTextarea.dispatchEvent(new Event('input'));
         });
     }
 
