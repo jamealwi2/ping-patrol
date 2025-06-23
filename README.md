@@ -82,7 +82,7 @@ Ping Patrol consists of three main components:
         The backend will typically run on `http://localhost:5000`. Keep this terminal open.
 
 3.  **Tester Agent Docker Image:**
-    *   The application is configured to use the pre-built image `docker.branch.io/tester-agent:beta.0`. Ensure your Kubernetes cluster can pull this image.
+    *   The application is configured to use the pre-built image `docker.branch.io/tester-agent:vbeta.1`. Ensure your Kubernetes cluster can pull this image.
     *   **Optional: Building the Tester Agent image locally:**
         If you need to build the image yourself (e.g., after making changes to the agent code):
         ```bash
@@ -91,18 +91,41 @@ Ping Patrol consists of three main components:
         ```
         If you build it locally with a different name, you'll need to update the `docker_image` variable in `backend/app.py`.
 
-4.  **Frontend Setup:**
-    *   Open a **new terminal window**.
-    *   Navigate to the **project root directory** (the one containing `index.html`).
-    *   Serve the frontend files using a simple HTTP server:
-        ```bash
-        python3 -m http.server 8000
-        # Or any other simple HTTP server
-        ```
-        Keep this terminal open.
+### Frontend Setup
 
-5.  **Access Ping Patrol:**
-    *   Open your web browser and go to `http://localhost:8000` (or the port your frontend server is using).
+You have two options for serving the frontend:
+
+**Option 1: Using a Local Python HTTP Server (No Frontend Containerization)**
+
+*   Open a **new terminal window**.
+*   Navigate to the **project root directory** (the one containing `index.html`).
+*   Serve the frontend files using a simple HTTP server:
+    ```bash
+    python3 -m http.server 8000
+    # Or any other simple HTTP server
+    ```
+*   Keep this terminal open.
+*   *Note: If using this method, and your backend is running on `localhost:5000`, ensure `script.js` API calls point to `http://localhost:5000`. The current version of `script.js` uses `http://host.docker.internal:5000` for Option 2.*
+
+**Option 2: Using a Docker Container (Recommended for Docker Desktop Users)**
+
+This method uses the `Dockerfile` in the project root to serve the frontend via Nginx. The `script.js` has been configured to use `http://host.docker.internal:5000` to reach the backend running on your Mac/Windows host.
+
+*   **Build the Frontend Docker Image:**
+    From the project root directory:
+    ```bash
+    docker build -t ping-patrol-frontend .
+    ```
+*   **Run the Frontend Docker Container:**
+    ```bash
+    docker run -d -p 8000:80 ping-patrol-frontend
+    ```
+    This will run the frontend container in detached mode and map port 8000 on your host to port 80 in the container (where Nginx is listening).
+*   **Accessing the Backend:** The `script.js` within this Docker image is configured to make API calls to `http://host.docker.internal:5000`. `host.docker.internal` is a special DNS name provided by Docker Desktop (for Mac and Windows) that resolves to the host machine's IP address from within a container. This allows the containerized frontend to communicate with the backend Flask application running directly on your host machine. If your backend is running on a different port, you would need to adjust `script.js` accordingly and rebuild the frontend image. For Docker on Linux (not Docker Desktop), if the backend is listening on `0.0.0.0:5000`, `http://localhost:5000` might work if the container uses host networking, or you might need to use the host's actual IP address found via `ip addr show docker0`.
+
+## Access Ping Patrol
+
+*   Open your web browser and go to `http://localhost:8000` (or the port your frontend server/container is mapped to).
 
 ## How it Works
 
@@ -112,7 +135,7 @@ Ping Patrol consists of three main components:
 4.  The frontend sends the list of destinations to the backend (`/api/test-connectivity`).
 5.  The backend:
     a.  Loads the `tester-agent/tester-agent-job.yaml` template.
-    b.  Dynamically updates the Job manifest with a unique name, the specified Docker image (`docker.branch.io/tester-agent:beta.0`), and the destinations as command-line arguments.
+    b.  Dynamically updates the Job manifest with a unique name, the specified Docker image (`docker.branch.io/tester-agent:vbeta.1`), and the destinations as command-line arguments.
     c.  Uses `kubectl apply -f <modified-job.yaml>` to deploy the Job to the `application` namespace of the currently active Kubernetes cluster context.
     d.  Polls the Job's status using `kubectl get job ...`.
     e.  Once the Job completes successfully, it retrieves the logs from the Job's pod using `kubectl logs ...`. These logs contain the JSON output from the Tester Agent.

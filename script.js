@@ -16,9 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Populate prepopulated destinations
     async function populatePrepopulatedDestinations() {
         try {
-            const response = await fetch('http://localhost:5000/api/destinations');
+            const response = await fetch('http://host.docker.internal:5000/api/destinations');
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status} while fetching http://localhost:5000/api/destinations`);
+                throw new Error(`HTTP error! status: ${response.status} while fetching http://host.docker.internal:5000/api/destinations`);
             }
 
             const destinations = await response.json();
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
         successfulResultsDiv.innerHTML = `<p>Requesting tests from backend for destinations: ${allDestinations.join(', ')}...</p>`;
 
         try {
-            const response = await fetch('http://localhost:5000/api/test-connectivity', {
+            const response = await fetch('http://host.docker.internal:5000/api/test-connectivity', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
